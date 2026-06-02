@@ -1,17 +1,39 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useState } from 'react';
+import Layout from '@/components/Layout';
+import Home from '@/pages/Home';
+import Upgrade from '@/pages/Upgrade';
+import Inventory from '@/pages/Inventory';
+import History from '@/pages/History';
+import Leaderboard from '@/pages/Leaderboard';
+import Profile from '@/pages/Profile';
+import Support from '@/pages/Support';
 
-const Index = () => {
+type Page = 'home' | 'upgrade' | 'inventory' | 'history' | 'leaderboard' | 'profile' | 'support';
+
+export default function Index() {
+  const [activePage, setActivePage] = useState<Page>('home');
+
+  const handleNavigate = (page: string) => {
+    setActivePage(page as Page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const renderPage = () => {
+    switch (activePage) {
+      case 'home': return <Home onNavigate={handleNavigate} />;
+      case 'upgrade': return <Upgrade />;
+      case 'inventory': return <Inventory />;
+      case 'history': return <History />;
+      case 'leaderboard': return <Leaderboard />;
+      case 'profile': return <Profile />;
+      case 'support': return <Support />;
+      default: return <Home onNavigate={handleNavigate} />;
+    }
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4 color-black text-black">Добро пожаловать!</h1>
-        <p className="text-xl text-gray-600">тут будет отображаться ваш проект</p>
-      </div>
-      <span className="absolute bottom-8 left-1/2 -translate-x-1/2 inline-block bg-[#FF6637] text-white text-sm px-4 py-2 rounded-full whitespace-nowrap">
-        Подождите 5 минут, Юра создает первую версию проекта с нуля
-      </span>
-    </div>
+    <Layout activePage={activePage} onNavigate={handleNavigate}>
+      {renderPage()}
+    </Layout>
   );
-};
-
-export default Index;
+}
