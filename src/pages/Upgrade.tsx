@@ -2,6 +2,89 @@ import { useState, useRef } from 'react';
 import Icon from '@/components/ui/icon';
 import { MOCK_SKINS, formatPrice, RARITY_COLORS, type Skin } from '@/data/skins';
 
+// Генерация звуков через Web Audio API
+const createAudioContext = () => {
+   
+  return new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+};
+
+const playWinSound = () => {
+  try {
+    const ctx = createAudioContext();
+    const notes = [523, 659, 784, 1047]; // C5 E5 G5 C6 — победный аккорд
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.12);
+      gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.12);
+      gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + i * 0.12 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.12 + 0.4);
+      osc.start(ctx.currentTime + i * 0.12);
+      osc.stop(ctx.currentTime + i * 0.12 + 0.4);
+    });
+    const shimmer = ctx.createOscillator();
+    const shimmerGain = ctx.createGain();
+    shimmer.connect(shimmerGain);
+    shimmerGain.connect(ctx.destination);
+    shimmer.type = 'triangle';
+    shimmer.frequency.setValueAtTime(2093, ctx.currentTime + 0.48);
+    shimmerGain.gain.setValueAtTime(0.1, ctx.currentTime + 0.48);
+    shimmerGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.0);
+    shimmer.start(ctx.currentTime + 0.48);
+    shimmer.stop(ctx.currentTime + 1.0);
+  } catch (_) { /* Web Audio not supported */ }
+};
+
+const playLoseSound = () => {
+  try {
+    const ctx = createAudioContext();
+    // Нисходящий грустный тон
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(300, ctx.currentTime);
+    osc.frequency.linearRampToValueAtTime(120, ctx.currentTime + 0.6);
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.7);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.7);
+
+    // Второй слой — низкий удар
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(80, ctx.currentTime);
+    osc2.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 0.4);
+    gain2.gain.setValueAtTime(0.2, ctx.currentTime);
+    gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    osc2.start(ctx.currentTime);
+    osc2.stop(ctx.currentTime + 0.5);
+  } catch (_) { /* Web Audio not supported */ }
+};
+
+const playSpinTickSound = () => {
+  try {
+    const ctx = createAudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(800, ctx.currentTime);
+    gain.gain.setValueAtTime(0.04, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.05);
+  } catch (_) { /* Web Audio not supported */ }
+};
+
 type UpgradeState = 'idle' | 'spinning' | 'won' | 'lost';
 
 const CHANCES = [
@@ -27,6 +110,7 @@ export default function Upgrade() {
     { user: 'ShadowFox', amount: 2500, side: 'win' },
   ]);
   const rafRef = useRef<number | null>(null);
+  const lastTickDeg = useRef<number>(0);
 
   // Шанс = цена ставки / цена цели * 100, зажат в [5, 95]
   const chance = selectedSource && selectedTarget
@@ -36,49 +120,57 @@ export default function Upgrade() {
   const handleUpgrade = () => {
     if (!selectedSource || upgradeState === 'spinning') return;
 
-    // Заранее определяем результат
     const roll = Math.random() * 100;
     const won = roll < chance;
 
-    // Зона победы: от 0° до chanceAngle (зелёная дуга)
-    // Стрелка должна остановиться ВНУТРИ зоны победы или поражения
-    const winZoneEnd = (chance / 100) * 360; // угол конца зелёной зоны
+    const winZoneEnd = (chance / 100) * 360;
 
-    // Выбираем финальный угол внутри нужной зоны
     let finalAngle: number;
     if (won) {
-      // Попадаем в зелёную зону [5°, winZoneEnd - 5°]
       const margin = Math.min(5, winZoneEnd * 0.1);
       finalAngle = margin + Math.random() * (winZoneEnd - margin * 2);
     } else {
-      // Попадаем в красную зону [winZoneEnd + 5°, 355°]
       const margin = 5;
       finalAngle = winZoneEnd + margin + Math.random() * (360 - winZoneEnd - margin * 2);
     }
 
-    // Добавляем 5+ полных оборотов для зрелищности
     const fullRotations = (5 + Math.floor(Math.random() * 3)) * 360;
     const targetDeg = fullRotations + finalAngle;
 
     setUpgradeState('spinning');
+    lastTickDeg.current = spinDeg;
 
     const duration = 4000;
     let startTime: number | null = null;
-    const startDeg = spinDeg % 360; // текущий угол (нормализованный)
+    const startDeg = spinDeg % 360;
+
+    // Интервал тиков: быстро в начале, медленнее к концу
+    const TICK_INTERVAL = 18; // градусов между тиками
 
     const animate = (ts: number) => {
       if (!startTime) startTime = ts;
       const elapsed = ts - startTime;
       const progress = Math.min(elapsed / duration, 1);
-      // ease-out cubic
       const eased = 1 - Math.pow(1 - progress, 3);
       const currentDeg = startDeg + (targetDeg - startDeg) * eased;
       setSpinDeg(currentDeg);
+
+      // Тик при каждом TICK_INTERVAL градусов вращения
+      const degDiff = currentDeg - lastTickDeg.current;
+      if (degDiff >= TICK_INTERVAL) {
+        playSpinTickSound();
+        lastTickDeg.current = currentDeg;
+      }
 
       if (progress < 1) {
         rafRef.current = requestAnimationFrame(animate);
       } else {
         setSpinDeg(targetDeg);
+        // Финальный звук с небольшой задержкой
+        setTimeout(() => {
+          if (won) playWinSound();
+          else playLoseSound();
+        }, 150);
         setUpgradeState(won ? 'won' : 'lost');
         setTimeout(() => setUpgradeState('idle'), 3500);
       }
