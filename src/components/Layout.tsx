@@ -5,6 +5,7 @@ interface LayoutProps {
   children: React.ReactNode;
   activePage: string;
   onNavigate: (page: string) => void;
+  balance: number;
 }
 
 const NAV_ITEMS = [
@@ -17,9 +18,8 @@ const NAV_ITEMS = [
   { id: 'support', label: 'Поддержка', icon: 'MessageCircle' },
 ];
 
-export default function Layout({ children, activePage, onNavigate }: LayoutProps) {
+export default function Layout({ children, activePage, onNavigate, balance }: LayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const balance = 12450;
 
   return (
     <div className="min-h-screen noise-bg" style={{ backgroundColor: 'var(--bg-deep)' }}>

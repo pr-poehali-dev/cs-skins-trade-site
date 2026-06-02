@@ -2,12 +2,19 @@ import { useState } from 'react';
 import Icon from '@/components/ui/icon';
 import { formatPrice } from '@/data/skins';
 
-export default function Profile() {
+interface ProfileProps {
+  balance: number;
+  onBalanceChange: (delta: number) => void;
+}
+
+export default function Profile({ balance, onBalanceChange }: ProfileProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'settings' | 'security'>('overview');
   const [steamLinked] = useState(false);
+  const [depositAmount, setDepositAmount] = useState('');
+  const [withdrawAmount, setWithdrawAmount] = useState('');
 
   const STATS = [
-    { label: 'Баланс', value: formatPrice(12450), color: '#FF8C00', icon: 'DollarSign' },
+    { label: 'Баланс', value: formatPrice(balance), color: '#FF8C00', icon: 'DollarSign' },
     { label: 'Апгрейдов', value: '32', color: '#00C8FF', icon: 'Zap' },
     { label: 'Побед', value: '18', color: '#00FF88', icon: 'TrendingUp' },
     { label: 'Рейтинг', value: '#47', color: '#8847FF', icon: 'Trophy' },
@@ -82,22 +89,22 @@ export default function Profile() {
             </div>
 
             {/* Balance widget */}
-            <div
-              className="hidden sm:flex flex-col items-end gap-1"
-            >
+            <div className="hidden sm:flex flex-col items-end gap-1">
               <div className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>Баланс</div>
               <div className="font-rajdhani font-bold text-2xl" style={{ color: '#FF8C00' }}>
-                {formatPrice(12450)}
+                {formatPrice(balance)}
               </div>
               <div className="flex gap-2">
                 <button
                   className="btn-glow px-3 py-1.5 rounded-lg text-xs"
+                  onClick={() => setActiveTab('overview')}
                 >
                   Пополнить
                 </button>
                 <button
                   className="px-3 py-1.5 rounded-lg text-xs transition-all hover:bg-[rgba(255,255,255,0.06)]"
                   style={{ border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)' }}
+                  onClick={() => setActiveTab('overview')}
                 >
                   Вывести
                 </button>
@@ -136,7 +143,66 @@ export default function Profile() {
 
         {/* Tab: Overview */}
         {activeTab === 'overview' && (
-          <div className="space-y-3 animate-fade-in-up">
+          <div className="space-y-4 animate-fade-in-up">
+            {/* Пополнение / Вывод */}
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div className="skin-card p-4">
+                <div className="font-rajdhani font-bold text-base text-white mb-3 flex items-center gap-2">
+                  <Icon name="ArrowDownLeft" size={16} style={{ color: '#00FF88' }} />
+                  Пополнить баланс
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    placeholder="Сумма (₽)"
+                    value={depositAmount}
+                    onChange={e => setDepositAmount(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-lg text-sm outline-none"
+                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'white' }}
+                  />
+                  <button
+                    onClick={() => {
+                      const a = parseFloat(depositAmount);
+                      if (a > 0) { onBalanceChange(a); setDepositAmount(''); }
+                    }}
+                    className="px-4 py-2 rounded-lg text-sm font-rajdhani font-bold transition-all hover:scale-105"
+                    style={{ background: 'rgba(0,255,136,0.15)', color: '#00FF88', border: '1px solid rgba(0,255,136,0.3)' }}
+                  >
+                    OK
+                  </button>
+                </div>
+              </div>
+              <div className="skin-card p-4">
+                <div className="font-rajdhani font-bold text-base text-white mb-3 flex items-center gap-2">
+                  <Icon name="ArrowUpRight" size={16} style={{ color: '#FF3B3B' }} />
+                  Вывести средства
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    placeholder="Сумма (₽)"
+                    value={withdrawAmount}
+                    onChange={e => setWithdrawAmount(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-lg text-sm outline-none"
+                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'white' }}
+                  />
+                  <button
+                    onClick={() => {
+                      const a = parseFloat(withdrawAmount);
+                      if (a > 0 && a <= balance) { onBalanceChange(-a); setWithdrawAmount(''); }
+                    }}
+                    className="px-4 py-2 rounded-lg text-sm font-rajdhani font-bold transition-all hover:scale-105"
+                    style={{ background: 'rgba(255,59,59,0.15)', color: '#FF3B3B', border: '1px solid rgba(255,59,59,0.3)' }}
+                  >
+                    OK
+                  </button>
+                </div>
+                {withdrawAmount && parseFloat(withdrawAmount) > balance && (
+                  <div className="text-xs mt-1.5" style={{ color: '#FF3B3B' }}>Недостаточно средств</div>
+                )}
+              </div>
+            </div>
+
             <h3 className="font-rajdhani font-bold text-lg text-white">История транзакций</h3>
             {TRANSACTIONS.map((tx, i) => (
               <div key={i} className="skin-card px-4 py-3 flex items-center justify-between">

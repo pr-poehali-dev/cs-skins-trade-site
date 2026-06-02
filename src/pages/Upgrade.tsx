@@ -71,10 +71,10 @@ const playTick = () => {
 type UpgradeState = 'idle' | 'spinning' | 'won' | 'lost';
 
 const QUICK_MODES = [
-  { label: '×2', chance: 50 },
-  { label: '×3', chance: 33 },
-  { label: '×5', chance: 20 },
-  { label: '×10', chance: 10 },
+  { label: '×2',  chance: 50, multiplier: 2  },
+  { label: '×3',  chance: 33, multiplier: 3  },
+  { label: '×5',  chance: 20, multiplier: 5  },
+  { label: '×10', chance: 10, multiplier: 10 },
 ];
 
 // ── SVG arc helper ─────────────────────────────────────────────────────────────
@@ -99,7 +99,12 @@ function arcD(cx: number, cy: number, r: number, startDeg: number, endDeg: numbe
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
-export default function Upgrade() {
+interface UpgradeProps {
+  balance: number;
+  onBalanceChange: (delta: number) => void;
+}
+
+export default function Upgrade({ balance, onBalanceChange }: UpgradeProps) {
   const [source, setSource] = useState<Skin | null>(null);
   const [target, setTarget] = useState<Skin | null>(null);
   const [state, setState] = useState<UpgradeState>('idle');
@@ -190,6 +195,14 @@ export default function Upgrade() {
         rafRef.current = requestAnimationFrame(animate);
       } else {
         setWheelDeg(targetDeg);
+        // Изменяем баланс: победа — получаем цену цели, проигрыш — теряем цену ставки
+        const stakePrice = source?.price ?? 0;
+        const targetPrice = target?.price ?? stakePrice * QUICK_MODES[quickMode].multiplier;
+        if (won) {
+          onBalanceChange(targetPrice - stakePrice); // прибыль = цель минус ставка
+        } else {
+          onBalanceChange(-stakePrice); // теряем ставку
+        }
         setTimeout(() => { if (won) playWinSound(); else playLoseSound(); }, 100);
         setState(won ? 'won' : 'lost');
         setTimeout(() => setState('idle'), 3500);
@@ -204,7 +217,16 @@ export default function Upgrade() {
   return (
     <div className="min-h-screen px-4 py-8" style={{ backgroundColor: 'var(--bg-deep)' }}>
       <div className="max-w-5xl mx-auto">
-        <h1 className="font-rajdhani font-bold text-3xl text-white mb-1">Апгрейд скина</h1>
+        <div className="flex items-center justify-between mb-1">
+          <h1 className="font-rajdhani font-bold text-3xl text-white">Апгрейд скина</h1>
+          <div className="flex items-center gap-2 px-4 py-2 rounded-xl"
+            style={{ background: 'rgba(255,140,0,0.08)', border: '1px solid rgba(255,140,0,0.2)' }}>
+            <Icon name="Wallet" size={16} style={{ color: '#FF8C00' }} />
+            <span className="font-rajdhani font-bold text-lg" style={{ color: '#FF8C00' }}>
+              {balance.toLocaleString('ru-RU')} ₽
+            </span>
+          </div>
+        </div>
         <p className="text-sm mb-8" style={{ color: 'rgba(255,255,255,0.4)' }}>
           Поставь свой скин — получи скин дороже
         </p>
