@@ -2,177 +2,197 @@ import { useState, useRef } from 'react';
 import Icon from '@/components/ui/icon';
 import { MOCK_SKINS, formatPrice, RARITY_COLORS, type Skin } from '@/data/skins';
 
-// Генерация звуков через Web Audio API
-const createAudioContext = () => {
-   
-  return new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-};
+// ── Web Audio helpers ──────────────────────────────────────────────────────────
+const getAudioCtx = () =>
+  new (window.AudioContext ||
+    (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
 
 const playWinSound = () => {
   try {
-    const ctx = createAudioContext();
-    const notes = [523, 659, 784, 1047]; // C5 E5 G5 C6 — победный аккорд
-    notes.forEach((freq, i) => {
+    const ctx = getAudioCtx();
+    [523, 659, 784, 1047].forEach((freq, i) => {
       const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
+      const g = ctx.createGain();
+      osc.connect(g); g.connect(ctx.destination);
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.12);
-      gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.12);
-      gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + i * 0.12 + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.12 + 0.4);
+      osc.frequency.value = freq;
+      g.gain.setValueAtTime(0, ctx.currentTime + i * 0.12);
+      g.gain.linearRampToValueAtTime(0.18, ctx.currentTime + i * 0.12 + 0.03);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.12 + 0.45);
       osc.start(ctx.currentTime + i * 0.12);
-      osc.stop(ctx.currentTime + i * 0.12 + 0.4);
+      osc.stop(ctx.currentTime + i * 0.12 + 0.45);
     });
-    const shimmer = ctx.createOscillator();
-    const shimmerGain = ctx.createGain();
-    shimmer.connect(shimmerGain);
-    shimmerGain.connect(ctx.destination);
-    shimmer.type = 'triangle';
-    shimmer.frequency.setValueAtTime(2093, ctx.currentTime + 0.48);
-    shimmerGain.gain.setValueAtTime(0.1, ctx.currentTime + 0.48);
-    shimmerGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.0);
-    shimmer.start(ctx.currentTime + 0.48);
-    shimmer.stop(ctx.currentTime + 1.0);
-  } catch (_) { /* Web Audio not supported */ }
+    const sh = ctx.createOscillator();
+    const sg = ctx.createGain();
+    sh.connect(sg); sg.connect(ctx.destination);
+    sh.type = 'triangle'; sh.frequency.value = 2093;
+    sg.gain.setValueAtTime(0.08, ctx.currentTime + 0.5);
+    sg.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.1);
+    sh.start(ctx.currentTime + 0.5); sh.stop(ctx.currentTime + 1.1);
+  } catch (_) { /* not supported */ }
 };
 
 const playLoseSound = () => {
   try {
-    const ctx = createAudioContext();
-    // Нисходящий грустный тон
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(300, ctx.currentTime);
-    osc.frequency.linearRampToValueAtTime(120, ctx.currentTime + 0.6);
-    gain.gain.setValueAtTime(0.15, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.7);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.7);
+    const ctx = getAudioCtx();
+    const o1 = ctx.createOscillator(); const g1 = ctx.createGain();
+    o1.connect(g1); g1.connect(ctx.destination);
+    o1.type = 'sawtooth';
+    o1.frequency.setValueAtTime(280, ctx.currentTime);
+    o1.frequency.linearRampToValueAtTime(110, ctx.currentTime + 0.65);
+    g1.gain.setValueAtTime(0.14, ctx.currentTime);
+    g1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.7);
+    o1.start(ctx.currentTime); o1.stop(ctx.currentTime + 0.7);
 
-    // Второй слой — низкий удар
-    const osc2 = ctx.createOscillator();
-    const gain2 = ctx.createGain();
-    osc2.connect(gain2);
-    gain2.connect(ctx.destination);
-    osc2.type = 'sine';
-    osc2.frequency.setValueAtTime(80, ctx.currentTime);
-    osc2.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 0.4);
-    gain2.gain.setValueAtTime(0.2, ctx.currentTime);
-    gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
-    osc2.start(ctx.currentTime);
-    osc2.stop(ctx.currentTime + 0.5);
-  } catch (_) { /* Web Audio not supported */ }
+    const o2 = ctx.createOscillator(); const g2 = ctx.createGain();
+    o2.connect(g2); g2.connect(ctx.destination);
+    o2.type = 'sine';
+    o2.frequency.setValueAtTime(75, ctx.currentTime);
+    o2.frequency.exponentialRampToValueAtTime(38, ctx.currentTime + 0.45);
+    g2.gain.setValueAtTime(0.18, ctx.currentTime);
+    g2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    o2.start(ctx.currentTime); o2.stop(ctx.currentTime + 0.5);
+  } catch (_) { /* not supported */ }
 };
 
-const playSpinTickSound = () => {
+const playTick = () => {
   try {
-    const ctx = createAudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(800, ctx.currentTime);
-    gain.gain.setValueAtTime(0.04, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.05);
-  } catch (_) { /* Web Audio not supported */ }
+    const ctx = getAudioCtx();
+    const o = ctx.createOscillator(); const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.type = 'square'; o.frequency.value = 900;
+    g.gain.setValueAtTime(0.035, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04);
+    o.start(ctx.currentTime); o.stop(ctx.currentTime + 0.04);
+  } catch (_) { /* not supported */ }
 };
 
+// ── Types ──────────────────────────────────────────────────────────────────────
 type UpgradeState = 'idle' | 'spinning' | 'won' | 'lost';
 
-const CHANCES = [
-  { label: '×2', multiplier: 2, chance: 50 },
-  { label: '×3', multiplier: 3, chance: 33 },
-  { label: '×5', multiplier: 5, chance: 20 },
-  { label: '×10', multiplier: 10, chance: 10 },
+const QUICK_MODES = [
+  { label: '×2', chance: 50 },
+  { label: '×3', chance: 33 },
+  { label: '×5', chance: 20 },
+  { label: '×10', chance: 10 },
 ];
 
+// ── SVG arc helper ─────────────────────────────────────────────────────────────
+function polarXY(cx: number, cy: number, r: number, angleDeg: number) {
+  const rad = ((angleDeg - 90) * Math.PI) / 180;
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
+
+function arcD(cx: number, cy: number, r: number, startDeg: number, endDeg: number) {
+  const span = endDeg - startDeg;
+  if (span <= 0) return '';
+  if (span >= 360) {
+    // full circle via two half-arcs
+    const top = polarXY(cx, cy, r, startDeg);
+    const bot = polarXY(cx, cy, r, startDeg + 180);
+    return `M ${top.x} ${top.y} A ${r} ${r} 0 1 1 ${bot.x} ${bot.y} A ${r} ${r} 0 1 1 ${top.x} ${top.y}`;
+  }
+  const s = polarXY(cx, cy, r, startDeg);
+  const e = polarXY(cx, cy, r, endDeg);
+  const large = span > 180 ? 1 : 0;
+  return `M ${s.x} ${s.y} A ${r} ${r} 0 ${large} 1 ${e.x} ${e.y}`;
+}
+
+// ── Component ──────────────────────────────────────────────────────────────────
 export default function Upgrade() {
-  const [selectedSource, setSelectedSource] = useState<Skin | null>(null);
-  const [selectedTarget, setSelectedTarget] = useState<Skin | null>(null);
-  const [upgradeState, setUpgradeState] = useState<UpgradeState>('idle');
-  const [spinDeg, setSpinDeg] = useState(0);
-  const [chanceMode, setChanceMode] = useState(0);
-  const [showSourcePicker, setShowSourcePicker] = useState(false);
-  const [showTargetPicker, setShowTargetPicker] = useState(false);
-  const [bettingActive, setBettingActive] = useState(false);
+  const [source, setSource] = useState<Skin | null>(null);
+  const [target, setTarget] = useState<Skin | null>(null);
+  const [state, setState] = useState<UpgradeState>('idle');
+  // wheelDeg: сколько градусов повёрнуто колесо (нарастающее, не сбрасывается)
+  const [wheelDeg, setWheelDeg] = useState(0);
+  const [quickMode, setQuickMode] = useState(0);
+  const [showPicker, setShowPicker] = useState<'source' | 'target' | null>(null);
+  const [bettingOpen, setBettingOpen] = useState(false);
   const [betAmount, setBetAmount] = useState('');
-  const [bets, setBets] = useState<{ user: string; amount: number; side: 'win' | 'lose' }[]>([
-    { user: 'NightOwl_CS', amount: 1200, side: 'win' },
-    { user: 'Reactor_33', amount: 800, side: 'lose' },
-    { user: 'ShadowFox', amount: 2500, side: 'win' },
+  const [bets, setBets] = useState([
+    { user: 'NightOwl_CS', amount: 1200, side: 'win' as const },
+    { user: 'Reactor_33',  amount: 800,  side: 'lose' as const },
+    { user: 'ShadowFox',   amount: 2500, side: 'win' as const },
   ]);
-  const rafRef = useRef<number | null>(null);
-  const lastTickDeg = useRef<number>(0);
 
-  // Шанс = цена ставки / цена цели * 100, зажат в [5, 95]
-  const chance = selectedSource && selectedTarget
-    ? Math.min(95, Math.max(5, Math.round((selectedSource.price / selectedTarget.price) * 100)))
-    : CHANCES[chanceMode].chance;
+  const rafRef       = useRef<number | null>(null);
+  const tickAccRef   = useRef(0); // накопленные градусы для тика
 
+  // ── Шанс победы ───────────────────────────────────────────────────────────
+  // Если оба скина выбраны: шанс = ставка/цель*100, зажатый в [3, 95]
+  // Иначе — быстрый режим
+  const chance =
+    source && target
+      ? Math.min(95, Math.max(3, Math.round((source.price / target.price) * 100)))
+      : QUICK_MODES[quickMode].chance;
+
+  const winZoneDeg = (chance / 100) * 360; // размер зелёной дуги
+
+  // ── Апгрейд ────────────────────────────────────────────────────────────────
   const handleUpgrade = () => {
-    if (!selectedSource || upgradeState === 'spinning') return;
+    if (state === 'spinning') return;
+    if (!source) return; // нужен хотя бы скин-ставка
 
-    const roll = Math.random() * 100;
-    const won = roll < chance;
+    // Заранее определяем результат честно
+    const won = Math.random() * 100 < chance;
 
-    const winZoneEnd = (chance / 100) * 360;
+    // Финальный угол колеса в системе «0° = верх = указатель»
+    // Зелёная зона: [0°, winZoneDeg). Красная: [winZoneDeg, 360°).
+    // Стрелка ФИКСИРОВАНА сверху, колесо крутится.
+    // Если колесо повёрнуто на X° — под стрелкой окажется сектор X°.
+    // Чтобы стрелка попала в зелёную зону: wheelDeg (mod 360) ∈ [0, winZoneDeg).
+    // Чтобы в красную: wheelDeg (mod 360) ∈ [winZoneDeg, 360).
 
-    let finalAngle: number;
+    const margin = Math.max(3, winZoneDeg * 0.05);
+    let sectorTarget: number;
     if (won) {
-      const margin = Math.min(5, winZoneEnd * 0.1);
-      finalAngle = margin + Math.random() * (winZoneEnd - margin * 2);
+      sectorTarget = margin + Math.random() * (winZoneDeg - margin * 2);
     } else {
-      const margin = 5;
-      finalAngle = winZoneEnd + margin + Math.random() * (360 - winZoneEnd - margin * 2);
+      const redSize = 360 - winZoneDeg;
+      sectorTarget = winZoneDeg + margin + Math.random() * (redSize - margin * 2);
     }
 
-    const fullRotations = (5 + Math.floor(Math.random() * 3)) * 360;
-    const targetDeg = fullRotations + finalAngle;
+    // Добавляем 6–8 полных оборотов для зрелищности
+    const extraRotations = (6 + Math.floor(Math.random() * 3)) * 360;
+    const startDeg = wheelDeg; // текущий угол
+    // Нормализуем текущий угол в [0,360)
+    const currentSector = ((startDeg % 360) + 360) % 360;
+    // Нам нужно доехать до sectorTarget
+    let delta = sectorTarget - currentSector;
+    if (delta < 0) delta += 360;
+    const targetDeg = startDeg + extraRotations + delta;
 
-    setUpgradeState('spinning');
-    lastTickDeg.current = spinDeg;
+    setState('spinning');
+    tickAccRef.current = 0;
 
-    const duration = 4000;
-    let startTime: number | null = null;
-    const startDeg = spinDeg % 360;
-
-    // Интервал тиков: быстро в начале, медленнее к концу
-    const TICK_INTERVAL = 18; // градусов между тиками
+    const DURATION = 4200;
+    let t0: number | null = null;
 
     const animate = (ts: number) => {
-      if (!startTime) startTime = ts;
-      const elapsed = ts - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      const currentDeg = startDeg + (targetDeg - startDeg) * eased;
-      setSpinDeg(currentDeg);
+      if (!t0) t0 = ts;
+      const elapsed = ts - t0;
+      const progress = Math.min(elapsed / DURATION, 1);
+      // ease-out quart — плавное торможение
+      const eased = 1 - Math.pow(1 - progress, 4);
+      const deg = startDeg + (targetDeg - startDeg) * eased;
 
-      // Тик при каждом TICK_INTERVAL градусов вращения
-      const degDiff = currentDeg - lastTickDeg.current;
-      if (degDiff >= TICK_INTERVAL) {
-        playSpinTickSound();
-        lastTickDeg.current = currentDeg;
+      setWheelDeg(deg);
+
+      // тики — каждые ~15° в начале, реже к концу
+      const moved = deg - startDeg;
+      const tickEvery = 15 + progress * 35; // 15→50 градусов
+      if (moved - tickAccRef.current >= tickEvery) {
+        playTick();
+        tickAccRef.current = moved;
       }
 
       if (progress < 1) {
         rafRef.current = requestAnimationFrame(animate);
       } else {
-        setSpinDeg(targetDeg);
-        // Финальный звук с небольшой задержкой
-        setTimeout(() => {
-          if (won) playWinSound();
-          else playLoseSound();
-        }, 150);
-        setUpgradeState(won ? 'won' : 'lost');
-        setTimeout(() => setUpgradeState('idle'), 3500);
+        setWheelDeg(targetDeg);
+        setTimeout(() => { if (won) playWinSound(); else playLoseSound(); }, 100);
+        setState(won ? 'won' : 'lost');
+        setTimeout(() => setState('idle'), 3500);
       }
     };
 
@@ -180,27 +200,7 @@ export default function Upgrade() {
     rafRef.current = requestAnimationFrame(animate);
   };
 
-  const handleBet = (side: 'win' | 'lose') => {
-    const amount = parseFloat(betAmount);
-    if (!amount || amount <= 0) return;
-    setBets(prev => [{ user: 'Вы', amount, side }, ...prev]);
-    setBetAmount('');
-  };
-
-  const arcPath = (cx: number, cy: number, r: number, startAngle: number, endAngle: number) => {
-    const start = polarToCartesian(cx, cy, r, endAngle);
-    const end = polarToCartesian(cx, cy, r, startAngle);
-    const largeArc = endAngle - startAngle <= 180 ? '0' : '1';
-    return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 0 ${end.x} ${end.y}`;
-  };
-
-  const polarToCartesian = (cx: number, cy: number, r: number, angle: number) => {
-    const rad = ((angle - 90) * Math.PI) / 180;
-    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
-  };
-
-  const chanceAngle = (chance / 100) * 360;
-
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen px-4 py-8" style={{ backgroundColor: 'var(--bg-deep)' }}>
       <div className="max-w-5xl mx-auto">
@@ -210,288 +210,252 @@ export default function Upgrade() {
         </p>
 
         <div className="grid lg:grid-cols-3 gap-6">
-          {/* Left: Source skin */}
+          {/* ── Скин-ставка ── */}
           <div>
             <div className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: 'rgba(255,255,255,0.35)' }}>
               Ставка (твой скин)
             </div>
             <div
-              className="skin-card p-4 cursor-pointer min-h-[200px] flex flex-col items-center justify-center transition-all hover:border-[rgba(255,140,0,0.3)]"
-              onClick={() => setShowSourcePicker(true)}
+              className="skin-card p-4 cursor-pointer min-h-[200px] flex flex-col items-center justify-center"
+              onClick={() => setShowPicker('source')}
             >
-              {selectedSource ? (
+              {source ? (
                 <>
-                  <div
-                    className="w-24 h-24 rounded-xl flex items-center justify-center text-5xl mb-3"
-                    style={{ background: `${RARITY_COLORS[selectedSource.rarity]}15` }}
-                  >
-                    {selectedSource.image}
+                  <div className="w-24 h-24 rounded-xl flex items-center justify-center text-5xl mb-3"
+                    style={{ background: `${RARITY_COLORS[source.rarity]}18` }}>
+                    {source.image}
                   </div>
-                  <div className={`text-xs px-2 py-0.5 rounded-full mb-1 rarity-tag-${selectedSource.rarity}`}>
-                    {selectedSource.wear}
-                  </div>
-                  <div className="font-rajdhani font-bold text-white text-center">{selectedSource.weapon}</div>
-                  <div className="text-xs text-center mb-2" style={{ color: 'rgba(255,255,255,0.5)' }}>{selectedSource.name}</div>
-                  <div className="font-rajdhani font-bold text-lg" style={{ color: '#FF8C00' }}>
-                    {formatPrice(selectedSource.price)}
-                  </div>
+                  <div className={`text-xs px-2 py-0.5 rounded-full mb-1 rarity-tag-${source.rarity}`}>{source.wear}</div>
+                  <div className="font-rajdhani font-bold text-white text-center">{source.weapon}</div>
+                  <div className="text-xs text-center mb-2" style={{ color: 'rgba(255,255,255,0.5)' }}>{source.name}</div>
+                  <div className="font-rajdhani font-bold text-lg" style={{ color: '#FF8C00' }}>{formatPrice(source.price)}</div>
+                  <button className="mt-2 text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}
+                    onClick={e => { e.stopPropagation(); setSource(null); }}>
+                    Убрать
+                  </button>
                 </>
               ) : (
                 <>
-                  <div className="w-16 h-16 rounded-xl flex items-center justify-center mb-3" style={{ background: 'rgba(255,140,0,0.06)', border: '2px dashed rgba(255,140,0,0.2)' }}>
+                  <div className="w-16 h-16 rounded-xl flex items-center justify-center mb-3"
+                    style={{ background: 'rgba(255,140,0,0.06)', border: '2px dashed rgba(255,140,0,0.25)' }}>
                     <Icon name="Plus" size={24} style={{ color: 'rgba(255,140,0,0.5)' }} />
                   </div>
-                  <div className="text-sm text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>Выбрать скин для ставки</div>
+                  <div className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>Выбрать скин-ставку</div>
                 </>
               )}
             </div>
           </div>
 
-          {/* Center: Spinner */}
+          {/* ── Колесо ── */}
           <div className="flex flex-col items-center">
-            <div className="text-xs font-bold uppercase tracking-widest mb-3 text-center" style={{ color: 'rgba(255,255,255,0.35)' }}>
+            <div className="text-xs font-bold uppercase tracking-widest mb-3 text-center"
+              style={{ color: 'rgba(255,255,255,0.35)' }}>
               Шанс победы
             </div>
 
-            {/* Upgrade wheel */}
-            <div className="relative w-56 h-56 mb-4">
-              {/* Стрелка-указатель: ФИКСИРОВАННАЯ сверху */}
-              <div
-                className="absolute left-1/2 top-0 z-20"
-                style={{ transform: 'translateX(-50%)', width: 0, height: 0 }}
-              >
+            <div className="relative w-56 h-56 mb-5">
+              {/* Фиксированная стрелка сверху */}
+              <div className="absolute top-0 left-1/2 z-20" style={{ transform: 'translateX(-50%)' }}>
                 <div style={{
-                  width: 0,
-                  height: 0,
-                  borderLeft: '8px solid transparent',
-                  borderRight: '8px solid transparent',
-                  borderTop: '20px solid #FF8C00',
-                  filter: 'drop-shadow(0 0 6px rgba(255,140,0,0.9))',
-                  marginLeft: '-8px',
+                  width: 0, height: 0,
+                  borderLeft: '7px solid transparent',
+                  borderRight: '7px solid transparent',
+                  borderTop: '18px solid #FF8C00',
+                  filter: 'drop-shadow(0 0 6px rgba(255,140,0,1))',
+                  marginLeft: '-7px',
                 }} />
               </div>
 
               {/* Вращающееся колесо */}
-              <div
-                className="absolute inset-0"
-                style={{ transform: `rotate(${spinDeg}deg)` }}
-              >
-                <svg width="224" height="224" viewBox="0 0 224 224">
-                  {/* Красная зона (поражение) — всё кольцо */}
-                  <circle
-                    cx="112" cy="112" r="90"
-                    fill="none"
-                    stroke="rgba(255,59,59,0.45)"
-                    strokeWidth="22"
+              <div className="absolute inset-0" style={{ transform: `rotate(${wheelDeg}deg)` }}>
+                <svg width="224" height="224" viewBox="0 0 224 224" style={{ overflow: 'visible' }}>
+                  {/* Красная зона — всё кольцо */}
+                  <path
+                    d={arcD(112, 112, 88, 0, 360)}
+                    fill="none" stroke="rgba(235,75,75,0.5)" strokeWidth="24"
                   />
-                  {/* Зелёная зона (победа) — дуга от 0 до chanceAngle */}
-                  {chance > 0 && chanceAngle < 360 && (
+                  {/* Зелёная зона */}
+                  {winZoneDeg > 0 && (
                     <path
-                      d={arcPath(112, 112, 90, 0, chanceAngle)}
-                      fill="none"
-                      stroke="#00FF88"
-                      strokeWidth="22"
-                      strokeLinecap="butt"
-                      style={{ filter: 'drop-shadow(0 0 8px rgba(0,255,136,0.7))' }}
+                      d={arcD(112, 112, 88, 0, winZoneDeg)}
+                      fill="none" stroke="#00FF88" strokeWidth="24"
+                      style={{ filter: 'drop-shadow(0 0 6px rgba(0,255,136,0.8))' }}
                     />
                   )}
-                  {chance >= 95 && (
-                    <circle
-                      cx="112" cy="112" r="90"
-                      fill="none"
-                      stroke="#00FF88"
-                      strokeWidth="22"
-                      style={{ filter: 'drop-shadow(0 0 8px rgba(0,255,136,0.7))' }}
-                    />
-                  )}
-                  {/* Разделительная линия */}
-                  {chance > 5 && chance < 95 && (
+                  {/* Разделитель зон */}
+                  {chance > 3 && chance < 97 && (
                     <line
-                      x1="112" y1="22"
-                      x2="112" y2="50"
-                      stroke="rgba(0,0,0,0.6)"
-                      strokeWidth="3"
+                      x1="112" y1="0" x2="112" y2="30"
+                      stroke="rgba(7,12,24,0.9)" strokeWidth="3"
                     />
                   )}
-                  {/* Внешнее кольцо */}
-                  <circle cx="112" cy="112" r="104" fill="none" stroke="rgba(255,140,0,0.1)" strokeWidth="1" />
-                  <circle cx="112" cy="112" r="76" fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
+                  {/* Внешний декор */}
+                  <circle cx="112" cy="112" r="102" fill="none"
+                    stroke="rgba(255,140,0,0.08)" strokeWidth="1" />
                 </svg>
               </div>
 
-              {/* Центральный круг (неподвижный) */}
-              <div
-                className="absolute rounded-full flex flex-col items-center justify-center z-10"
+              {/* Центр (неподвижный) */}
+              <div className="absolute rounded-full flex flex-col items-center justify-center z-10"
                 style={{
-                  inset: '52px',
-                  background: 'radial-gradient(circle, #0D1526, #070C18)',
+                  inset: '56px',
+                  background: 'radial-gradient(circle at center, #111B30, #070C18)',
                   border: '2px solid rgba(255,140,0,0.2)',
-                  boxShadow: '0 0 30px rgba(0,0,0,0.8)',
-                }}
-              >
-                {upgradeState === 'spinning' ? (
-                  <div className="text-center">
-                    <div className="w-6 h-6 border-2 border-[#FF8C00] border-t-transparent rounded-full animate-spin mx-auto mb-1" />
-                    <div className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Крутим</div>
-                  </div>
-                ) : upgradeState === 'won' ? (
+                  boxShadow: '0 0 20px rgba(0,0,0,0.8)',
+                }}>
+                {state === 'spinning' ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-[#FF8C00] border-t-transparent rounded-full animate-spin mb-1" />
+                    <div className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>крутим</div>
+                  </>
+                ) : state === 'won' ? (
                   <div className="text-center animate-win-burst">
-                    <div className="text-2xl mb-0.5">🏆</div>
+                    <div className="text-2xl">🏆</div>
                     <div className="font-rajdhani font-bold text-sm" style={{ color: '#00FF88' }}>ПОБЕДА!</div>
                   </div>
-                ) : upgradeState === 'lost' ? (
+                ) : state === 'lost' ? (
                   <div className="text-center animate-win-burst">
-                    <div className="text-2xl mb-0.5">💔</div>
+                    <div className="text-2xl">💔</div>
                     <div className="font-rajdhani font-bold text-sm" style={{ color: '#FF3B3B' }}>ПРОИГРЫШ</div>
                   </div>
                 ) : (
                   <div className="text-center">
-                    <div
-                      className="font-rajdhani font-bold text-3xl leading-none"
-                      style={{ color: chance >= 50 ? '#00FF88' : chance >= 25 ? '#FF8C00' : '#FF3B3B' }}
-                    >
+                    <div className="font-rajdhani font-bold text-3xl leading-none"
+                      style={{ color: chance >= 50 ? '#00FF88' : chance >= 25 ? '#FF8C00' : '#FF3B3B' }}>
                       {chance}%
                     </div>
-                    <div className="text-[10px] mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>шанс победы</div>
+                    <div className="text-[10px] mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>шанс</div>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Quick chance buttons */}
-            {!selectedSource && !selectedTarget && (
+            {/* Быстрые множители (только без выбранных скинов) */}
+            {(!source || !target) && (
               <div className="flex gap-2 mb-4">
-                {CHANCES.map((c, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setChanceMode(i)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-rajdhani font-bold transition-all ${
-                      chanceMode === i ? 'text-[#070C18]' : 'text-white'
-                    }`}
-                    style={chanceMode === i
-                      ? { background: '#FF8C00' }
-                      : { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }
-                    }
-                  >
-                    {c.label}
+                {QUICK_MODES.map((m, i) => (
+                  <button key={i} onClick={() => setQuickMode(i)}
+                    className="px-3 py-1.5 rounded-lg text-sm font-rajdhani font-bold transition-all"
+                    style={quickMode === i
+                      ? { background: '#FF8C00', color: '#070C18' }
+                      : { background: 'rgba(255,255,255,0.07)', color: 'white', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    {m.label}
                   </button>
                 ))}
               </div>
             )}
 
-            {/* Upgrade button */}
+            {/* Шанс-бар */}
+            <div className="w-full mb-4">
+              <div className="flex justify-between text-xs mb-1">
+                <span style={{ color: '#00FF88' }}>Победа {chance}%</span>
+                <span style={{ color: '#FF3B3B' }}>Проигрыш {100 - chance}%</span>
+              </div>
+              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(235,75,75,0.4)' }}>
+                <div className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${chance}%`, background: 'linear-gradient(90deg, #00FF88, #00C8FF)' }} />
+              </div>
+            </div>
+
+            {/* Кнопка апгрейда */}
             <button
               onClick={handleUpgrade}
-              disabled={!selectedSource || upgradeState === 'spinning'}
+              disabled={!source || state === 'spinning'}
               className="btn-glow w-full py-4 rounded-xl text-lg font-rajdhani font-bold flex items-center justify-center gap-2 glow-orange disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {upgradeState === 'spinning' ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                  Апгрейд...
-                </>
+              {state === 'spinning' ? (
+                <><div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />Апгрейд...</>
               ) : (
-                <>
-                  <Icon name="Zap" size={20} />
-                  АПГРЕЙД
-                </>
+                <><Icon name="Zap" size={20} />АПГРЕЙД</>
               )}
             </button>
 
-            {selectedSource && selectedTarget && (
-              <div className="mt-3 text-center text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                {formatPrice(selectedSource.price)} → {formatPrice(selectedTarget.price)}
+            {source && target && (
+              <div className="mt-2 text-center text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                {formatPrice(source.price)} → {formatPrice(target.price)}
               </div>
             )}
           </div>
 
-          {/* Right: Target skin */}
+          {/* ── Скин-цель ── */}
           <div>
             <div className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: 'rgba(255,255,255,0.35)' }}>
               Цель (желаемый скин)
             </div>
             <div
-              className="skin-card p-4 cursor-pointer min-h-[200px] flex flex-col items-center justify-center transition-all hover:border-[rgba(255,140,0,0.3)]"
-              onClick={() => setShowTargetPicker(true)}
+              className="skin-card p-4 cursor-pointer min-h-[200px] flex flex-col items-center justify-center"
+              onClick={() => setShowPicker('target')}
             >
-              {selectedTarget ? (
+              {target ? (
                 <>
-                  <div
-                    className="w-24 h-24 rounded-xl flex items-center justify-center text-5xl mb-3"
-                    style={{ background: `${RARITY_COLORS[selectedTarget.rarity]}15` }}
-                  >
-                    {selectedTarget.image}
+                  <div className="w-24 h-24 rounded-xl flex items-center justify-center text-5xl mb-3"
+                    style={{ background: `${RARITY_COLORS[target.rarity]}18` }}>
+                    {target.image}
                   </div>
-                  <div className={`text-xs px-2 py-0.5 rounded-full mb-1 rarity-tag-${selectedTarget.rarity}`}>
-                    {selectedTarget.wear}
-                  </div>
-                  <div className="font-rajdhani font-bold text-white text-center">{selectedTarget.weapon}</div>
-                  <div className="text-xs text-center mb-2" style={{ color: 'rgba(255,255,255,0.5)' }}>{selectedTarget.name}</div>
-                  <div className="font-rajdhani font-bold text-lg" style={{ color: '#FF8C00' }}>
-                    {formatPrice(selectedTarget.price)}
-                  </div>
+                  <div className={`text-xs px-2 py-0.5 rounded-full mb-1 rarity-tag-${target.rarity}`}>{target.wear}</div>
+                  <div className="font-rajdhani font-bold text-white text-center">{target.weapon}</div>
+                  <div className="text-xs text-center mb-2" style={{ color: 'rgba(255,255,255,0.5)' }}>{target.name}</div>
+                  <div className="font-rajdhani font-bold text-lg" style={{ color: '#FF8C00' }}>{formatPrice(target.price)}</div>
+                  <button className="mt-2 text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}
+                    onClick={e => { e.stopPropagation(); setTarget(null); }}>
+                    Убрать
+                  </button>
                 </>
               ) : (
                 <>
-                  <div className="w-16 h-16 rounded-xl flex items-center justify-center mb-3" style={{ background: 'rgba(255,140,0,0.06)', border: '2px dashed rgba(255,140,0,0.2)' }}>
+                  <div className="w-16 h-16 rounded-xl flex items-center justify-center mb-3"
+                    style={{ background: 'rgba(255,140,0,0.06)', border: '2px dashed rgba(255,140,0,0.25)' }}>
                     <Icon name="Target" size={24} style={{ color: 'rgba(255,140,0,0.5)' }} />
                   </div>
-                  <div className="text-sm text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>Выбрать цель апгрейда</div>
+                  <div className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>Выбрать скин-цель</div>
                 </>
               )}
             </div>
           </div>
         </div>
 
-        {/* Betting section */}
+        {/* ── Ставки зрителей ── */}
         <div className="mt-8">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <h2 className="font-rajdhani font-bold text-xl text-white">Ставки зрителей</h2>
-              <div
-                className="px-2 py-0.5 rounded-full text-xs font-bold"
-                style={{ background: 'rgba(0,200,255,0.1)', color: '#00C8FF', border: '1px solid rgba(0,200,255,0.2)' }}
-              >
+              <div className="px-2 py-0.5 rounded-full text-xs font-bold"
+                style={{ background: 'rgba(0,200,255,0.1)', color: '#00C8FF', border: '1px solid rgba(0,200,255,0.2)' }}>
                 {bets.length} ставок
               </div>
             </div>
-            <button
-              onClick={() => setBettingActive(!bettingActive)}
+            <button onClick={() => setBettingOpen(v => !v)}
               className="text-sm flex items-center gap-1 px-3 py-1.5 rounded-lg transition-all"
-              style={bettingActive
+              style={bettingOpen
                 ? { background: 'rgba(255,140,0,0.1)', color: '#FF8C00', border: '1px solid rgba(255,140,0,0.25)' }
-                : { background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.1)' }
-              }
-            >
+                : { background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.1)' }}>
               <Icon name="TrendingUp" size={14} />
-              {bettingActive ? 'Закрыть' : 'Сделать ставку'}
+              {bettingOpen ? 'Закрыть' : 'Сделать ставку'}
             </button>
           </div>
 
-          {bettingActive && (
+          {bettingOpen && (
             <div className="skin-card p-4 mb-4 animate-fade-in-up">
-              <div className="text-sm font-medium mb-3 text-white">Сделай ставку на исход апгрейда</div>
+              <div className="text-sm font-medium mb-3 text-white">Поставь на исход апгрейда</div>
               <div className="flex gap-3">
-                <input
-                  type="number"
-                  placeholder="Сумма ставки (₽)"
-                  value={betAmount}
+                <input type="number" placeholder="Сумма (₽)" value={betAmount}
                   onChange={e => setBetAmount(e.target.value)}
                   className="flex-1 px-3 py-2 rounded-lg text-sm outline-none"
-                  style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'white' }}
-                />
-                <button
-                  onClick={() => handleBet('win')}
-                  className="px-4 py-2 rounded-lg text-sm font-rajdhani font-bold transition-all hover:scale-105"
-                  style={{ background: 'rgba(0,255,136,0.15)', color: '#00FF88', border: '1px solid rgba(0,255,136,0.3)' }}
-                >
+                  style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'white' }} />
+                <button onClick={() => {
+                    const a = parseFloat(betAmount);
+                    if (a > 0) { setBets(p => [{ user: 'Вы', amount: a, side: 'win' }, ...p]); setBetAmount(''); }
+                  }}
+                  className="px-4 py-2 rounded-lg text-sm font-rajdhani font-bold"
+                  style={{ background: 'rgba(0,255,136,0.15)', color: '#00FF88', border: '1px solid rgba(0,255,136,0.3)' }}>
                   На победу
                 </button>
-                <button
-                  onClick={() => handleBet('lose')}
-                  className="px-4 py-2 rounded-lg text-sm font-rajdhani font-bold transition-all hover:scale-105"
-                  style={{ background: 'rgba(255,59,59,0.15)', color: '#FF3B3B', border: '1px solid rgba(255,59,59,0.3)' }}
-                >
+                <button onClick={() => {
+                    const a = parseFloat(betAmount);
+                    if (a > 0) { setBets(p => [{ user: 'Вы', amount: a, side: 'lose' }, ...p]); setBetAmount(''); }
+                  }}
+                  className="px-4 py-2 rounded-lg text-sm font-rajdhani font-bold"
+                  style={{ background: 'rgba(255,59,59,0.15)', color: '#FF3B3B', border: '1px solid rgba(255,59,59,0.3)' }}>
                   На проигрыш
                 </button>
               </div>
@@ -503,17 +467,13 @@ export default function Upgrade() {
               <div key={i} className="skin-card px-3 py-2.5 flex items-center justify-between">
                 <div>
                   <div className="text-sm font-medium text-white">{bet.user}</div>
-                  <div className="text-xs font-rajdhani font-bold" style={{ color: '#FF8C00' }}>
-                    {formatPrice(bet.amount)}
-                  </div>
+                  <div className="text-xs font-rajdhani font-bold" style={{ color: '#FF8C00' }}>{formatPrice(bet.amount)}</div>
                 </div>
-                <div
-                  className="text-xs px-2 py-0.5 rounded-full font-bold"
+                <div className="text-xs px-2 py-0.5 rounded-full font-bold"
                   style={{
                     background: bet.side === 'win' ? 'rgba(0,255,136,0.1)' : 'rgba(255,59,59,0.1)',
                     color: bet.side === 'win' ? '#00FF88' : '#FF3B3B',
-                  }}
-                >
+                  }}>
                   {bet.side === 'win' ? '▲ Победа' : '▼ Проигрыш'}
                 </div>
               </div>
@@ -522,42 +482,33 @@ export default function Upgrade() {
         </div>
       </div>
 
-      {/* Skin picker modals */}
-      {(showSourcePicker || showTargetPicker) && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      {/* ── Пикер скинов ── */}
+      {showPicker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: 'rgba(7,12,24,0.92)', backdropFilter: 'blur(12px)' }}
-          onClick={() => { setShowSourcePicker(false); setShowTargetPicker(false); }}
-        >
-          <div
-            className="w-full max-w-2xl rounded-2xl p-6"
-            style={{ background: 'var(--bg-card2)', border: '1px solid rgba(255,140,0,0.15)' }}
-            onClick={e => e.stopPropagation()}
-          >
+          onClick={() => setShowPicker(null)}>
+          <div className="w-full max-w-2xl rounded-2xl p-6"
+            style={{ background: '#111B30', border: '1px solid rgba(255,140,0,0.15)' }}
+            onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <h3 className="font-rajdhani font-bold text-xl text-white">
-                {showSourcePicker ? 'Выбери скин для ставки' : 'Выбери целевой скин'}
+                {showPicker === 'source' ? 'Выбери скин-ставку' : 'Выбери целевой скин'}
               </h3>
-              <button onClick={() => { setShowSourcePicker(false); setShowTargetPicker(false); }}>
+              <button onClick={() => setShowPicker(null)}>
                 <Icon name="X" size={20} style={{ color: 'rgba(255,255,255,0.5)' }} />
               </button>
             </div>
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-96 overflow-y-auto pr-1">
               {MOCK_SKINS.map(skin => (
-                <div
-                  key={skin.id}
+                <div key={skin.id}
                   className={`skin-card rarity-${skin.rarity} p-3 cursor-pointer`}
                   onClick={() => {
-                    if (showSourcePicker) setSelectedSource(skin);
-                    else setSelectedTarget(skin);
-                    setShowSourcePicker(false);
-                    setShowTargetPicker(false);
-                  }}
-                >
-                  <div
-                    className="w-full aspect-square rounded-xl flex items-center justify-center text-3xl mb-2"
-                    style={{ background: `${RARITY_COLORS[skin.rarity]}12` }}
-                  >
+                    if (showPicker === 'source') setSource(skin);
+                    else setTarget(skin);
+                    setShowPicker(null);
+                  }}>
+                  <div className="w-full aspect-square rounded-xl flex items-center justify-center text-3xl mb-2"
+                    style={{ background: `${RARITY_COLORS[skin.rarity]}12` }}>
                     {skin.image}
                   </div>
                   <div className="font-rajdhani font-bold text-xs text-white">{skin.weapon}</div>
