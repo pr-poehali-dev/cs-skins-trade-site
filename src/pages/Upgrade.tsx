@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import Icon from '@/components/ui/icon';
 import { MOCK_SKINS, formatPrice, RARITY_COLORS, type Skin } from '@/data/skins';
 
@@ -26,35 +26,66 @@ export default function Upgrade() {
     { user: 'Reactor_33', amount: 800, side: 'lose' },
     { user: 'ShadowFox', amount: 2500, side: 'win' },
   ]);
-  const spinRef = useRef<NodeJS.Timeout | null>(null);
+  const rafRef = useRef<number | null>(null);
 
+  // Шанс = цена ставки / цена цели * 100, зажат в [5, 95]
   const chance = selectedSource && selectedTarget
     ? Math.min(95, Math.max(5, Math.round((selectedSource.price / selectedTarget.price) * 100)))
     : CHANCES[chanceMode].chance;
 
   const handleUpgrade = () => {
     if (!selectedSource || upgradeState === 'spinning') return;
+
+    // Заранее определяем результат
+    const roll = Math.random() * 100;
+    const won = roll < chance;
+
+    // Зона победы: от 0° до chanceAngle (зелёная дуга)
+    // Стрелка должна остановиться ВНУТРИ зоны победы или поражения
+    const winZoneEnd = (chance / 100) * 360; // угол конца зелёной зоны
+
+    // Выбираем финальный угол внутри нужной зоны
+    let finalAngle: number;
+    if (won) {
+      // Попадаем в зелёную зону [5°, winZoneEnd - 5°]
+      const margin = Math.min(5, winZoneEnd * 0.1);
+      finalAngle = margin + Math.random() * (winZoneEnd - margin * 2);
+    } else {
+      // Попадаем в красную зону [winZoneEnd + 5°, 355°]
+      const margin = 5;
+      finalAngle = winZoneEnd + margin + Math.random() * (360 - winZoneEnd - margin * 2);
+    }
+
+    // Добавляем 5+ полных оборотов для зрелищности
+    const fullRotations = (5 + Math.floor(Math.random() * 3)) * 360;
+    const targetDeg = fullRotations + finalAngle;
+
     setUpgradeState('spinning');
 
-    const totalSpins = 1440 + Math.random() * 720;
-    const won = Math.random() * 100 < chance;
-
-    let start: number | null = null;
-    const duration = 3000;
+    const duration = 4000;
+    let startTime: number | null = null;
+    const startDeg = spinDeg % 360; // текущий угол (нормализованный)
 
     const animate = (ts: number) => {
-      if (!start) start = ts;
-      const progress = Math.min((ts - start) / duration, 1);
+      if (!startTime) startTime = ts;
+      const elapsed = ts - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      // ease-out cubic
       const eased = 1 - Math.pow(1 - progress, 3);
-      setSpinDeg(totalSpins * eased);
+      const currentDeg = startDeg + (targetDeg - startDeg) * eased;
+      setSpinDeg(currentDeg);
+
       if (progress < 1) {
-        requestAnimationFrame(animate);
+        rafRef.current = requestAnimationFrame(animate);
       } else {
+        setSpinDeg(targetDeg);
         setUpgradeState(won ? 'won' : 'lost');
         setTimeout(() => setUpgradeState('idle'), 3500);
       }
     };
-    requestAnimationFrame(animate);
+
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(animate);
   };
 
   const handleBet = (side: 'win' | 'lose') => {
@@ -130,68 +161,106 @@ export default function Upgrade() {
               Шанс победы
             </div>
 
-            {/* Upgrade arc wheel */}
+            {/* Upgrade wheel */}
             <div className="relative w-56 h-56 mb-4">
-              <svg width="224" height="224" viewBox="0 0 224 224" className="absolute inset-0">
-                {/* Background ring */}
-                <circle cx="112" cy="112" r="90" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="18" />
-                {/* Lose arc */}
-                <path
-                  d={arcPath(112, 112, 90, 0, 360)}
-                  fill="none"
-                  stroke="rgba(255,59,59,0.3)"
-                  strokeWidth="18"
-                  strokeLinecap="round"
-                />
-                {/* Win arc */}
-                {chance > 0 && (
-                  <path
-                    d={arcPath(112, 112, 90, 0, chanceAngle)}
-                    fill="none"
-                    stroke="#00FF88"
-                    strokeWidth="18"
-                    strokeLinecap="round"
-                    style={{ filter: 'drop-shadow(0 0 8px rgba(0,255,136,0.6))' }}
-                  />
-                )}
-                {/* Outer ring */}
-                <circle cx="112" cy="112" r="102" fill="none" stroke="rgba(255,140,0,0.08)" strokeWidth="1" />
-              </svg>
-
-              {/* Spinning pointer */}
+              {/* Стрелка-указатель: ФИКСИРОВАННАЯ сверху */}
               <div
-                className="absolute inset-0 flex items-center justify-center"
-                style={{ transform: `rotate(${spinDeg}deg)`, transition: upgradeState === 'spinning' ? 'none' : 'transform 0.3s ease' }}
+                className="absolute left-1/2 top-0 z-20"
+                style={{ transform: 'translateX(-50%)', width: 0, height: 0 }}
               >
-                <div
-                  className="absolute top-2 w-1 h-8 rounded-full"
-                  style={{ background: 'linear-gradient(180deg, #FF8C00, transparent)', left: '50%', transform: 'translateX(-50%)' }}
-                />
+                <div style={{
+                  width: 0,
+                  height: 0,
+                  borderLeft: '8px solid transparent',
+                  borderRight: '8px solid transparent',
+                  borderTop: '20px solid #FF8C00',
+                  filter: 'drop-shadow(0 0 6px rgba(255,140,0,0.9))',
+                  marginLeft: '-8px',
+                }} />
               </div>
 
-              {/* Center content */}
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
+              {/* Вращающееся колесо */}
+              <div
+                className="absolute inset-0"
+                style={{ transform: `rotate(${spinDeg}deg)` }}
+              >
+                <svg width="224" height="224" viewBox="0 0 224 224">
+                  {/* Красная зона (поражение) — всё кольцо */}
+                  <circle
+                    cx="112" cy="112" r="90"
+                    fill="none"
+                    stroke="rgba(255,59,59,0.45)"
+                    strokeWidth="22"
+                  />
+                  {/* Зелёная зона (победа) — дуга от 0 до chanceAngle */}
+                  {chance > 0 && chanceAngle < 360 && (
+                    <path
+                      d={arcPath(112, 112, 90, 0, chanceAngle)}
+                      fill="none"
+                      stroke="#00FF88"
+                      strokeWidth="22"
+                      strokeLinecap="butt"
+                      style={{ filter: 'drop-shadow(0 0 8px rgba(0,255,136,0.7))' }}
+                    />
+                  )}
+                  {chance >= 95 && (
+                    <circle
+                      cx="112" cy="112" r="90"
+                      fill="none"
+                      stroke="#00FF88"
+                      strokeWidth="22"
+                      style={{ filter: 'drop-shadow(0 0 8px rgba(0,255,136,0.7))' }}
+                    />
+                  )}
+                  {/* Разделительная линия */}
+                  {chance > 5 && chance < 95 && (
+                    <line
+                      x1="112" y1="22"
+                      x2="112" y2="50"
+                      stroke="rgba(0,0,0,0.6)"
+                      strokeWidth="3"
+                    />
+                  )}
+                  {/* Внешнее кольцо */}
+                  <circle cx="112" cy="112" r="104" fill="none" stroke="rgba(255,140,0,0.1)" strokeWidth="1" />
+                  <circle cx="112" cy="112" r="76" fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
+                </svg>
+              </div>
+
+              {/* Центральный круг (неподвижный) */}
+              <div
+                className="absolute rounded-full flex flex-col items-center justify-center z-10"
+                style={{
+                  inset: '52px',
+                  background: 'radial-gradient(circle, #0D1526, #070C18)',
+                  border: '2px solid rgba(255,140,0,0.2)',
+                  boxShadow: '0 0 30px rgba(0,0,0,0.8)',
+                }}
+              >
                 {upgradeState === 'spinning' ? (
                   <div className="text-center">
-                    <div className="font-rajdhani font-bold text-3xl text-white animate-pulse">...</div>
-                    <div className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>Крутим</div>
+                    <div className="w-6 h-6 border-2 border-[#FF8C00] border-t-transparent rounded-full animate-spin mx-auto mb-1" />
+                    <div className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Крутим</div>
                   </div>
                 ) : upgradeState === 'won' ? (
                   <div className="text-center animate-win-burst">
-                    <div className="text-3xl mb-1">🏆</div>
-                    <div className="font-rajdhani font-bold text-lg" style={{ color: '#00FF88' }}>ПОБЕДА!</div>
+                    <div className="text-2xl mb-0.5">🏆</div>
+                    <div className="font-rajdhani font-bold text-sm" style={{ color: '#00FF88' }}>ПОБЕДА!</div>
                   </div>
                 ) : upgradeState === 'lost' ? (
                   <div className="text-center animate-win-burst">
-                    <div className="text-3xl mb-1">💔</div>
-                    <div className="font-rajdhani font-bold text-lg" style={{ color: '#FF3B3B' }}>ПРОИГРЫШ</div>
+                    <div className="text-2xl mb-0.5">💔</div>
+                    <div className="font-rajdhani font-bold text-sm" style={{ color: '#FF3B3B' }}>ПРОИГРЫШ</div>
                   </div>
                 ) : (
                   <div className="text-center">
-                    <div className="font-rajdhani font-bold text-4xl" style={{ color: chance >= 50 ? '#00FF88' : chance >= 25 ? '#FF8C00' : '#FF3B3B' }}>
+                    <div
+                      className="font-rajdhani font-bold text-3xl leading-none"
+                      style={{ color: chance >= 50 ? '#00FF88' : chance >= 25 ? '#FF8C00' : '#FF3B3B' }}
+                    >
                       {chance}%
                     </div>
-                    <div className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>шанс победы</div>
+                    <div className="text-[10px] mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>шанс победы</div>
                   </div>
                 )}
               </div>
